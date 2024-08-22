@@ -1,10 +1,27 @@
-# Sirius Quickstart
+# Sirius Simple Example
 
-Welcome to the `sirius-quickstart` repository, a minimal example to get you started with the [**Sirius**](https://github.com/snarkify/sirius/) framework for Incrementally Verifiable Computation (IVC).
+Welcome to the sirius-simple-example repository, an example to get you started with the [**Sirius**](https://github.com/snarkify/sirius/) framework for Incrementally Verifiable Computation (IVC).
+
+Built from [sirius-quickstart](https://github.com/snarkify/sirius-quickstart), this repository demonstrates a straightforward implementation of a `StepCircuit` that performs a simple summation operation over multiple folding steps. This example is designed to help developers understand the core concepts and API of Sirius, particularly in configuring and synthesizing custom circuits.
 
 ## Introduction
 
-This repository provides a simple, runnable example to demonstrate the basic usage of the Sirius framework. The example implements a trivial `StepCircuit` that performs identity mapping (i.e., it outputs the input unchanged) over multiple folding steps. This example is intended to help developers understand the core concepts and API of Sirius.
+This example showcases the implementation of a custom `StepCircuit` that sums its input (`z_in`) and outputs the result. Unlike the trivial identity mapping example in the original quickstart, this example adds more complexity to illustrate how you can customize and extend the framework to suit your needs.
+
+## Understanding the StepCircuit in Sirius Simple Example
+
+In the sirius-simple-example, the `StepCircuit` performs a simple yet illustrative operation that sums its input values (`z_in`). This specific implementation serves as an educational example of how to define custom step-circuits within the Sirius framework.
+
+### What Does the StepCircuit Do?
+The `StepCircuit` in this example is designed to perform a summation operation. Here's what it does in detail:
+
+- Input Handling (`z_in`): The circuit takes an input, denoted as `z_in`. This input is an array of field elements that represent the data from the previous computation step or the initial input for the circuit (`z_0`).
+
+- Summation Logic: The circuit then creates a gate that sums each element in `z_in` with itself (i.e., performs input + input) and outputs the result. Essentially, this operation doubles each element of the input array.
+
+- Output (`z_out`): The result of this summation is placed in an output array, `z_out`, which is then passed to the next step of the circuit. In this example, `z_out` is simply `2 * z_in` for each element, which demonstrates the basic use of gates and selectors in a custom circuit.
+
+In a real-world scenario, such a circuit could be extended to perform more complex arithmetic or logic operations, depending on the application's needs. However, the simplicity of this example makes it an excellent starting point for developers new to the framework.
 
 ## Prerequisites
 
@@ -28,8 +45,8 @@ rustup update
 Clone the sirius-quickstart repository to your local machine:
 
 ```bash
-git clone https://github.com/your-username/sirius-quickstart.git;
-cd sirius-quickstart
+git clone https://github.com/your-username/sirius-simple-example.git
+cd sirius-simple-example
 ```
 
 ## Project Structure

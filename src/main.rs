@@ -2,6 +2,7 @@ use std::path::Path;
 
 use sirius::{
     ff::Field,
+    halo2_proofs::poly::Rotation,
     ivc::{
         step_circuit::{trivial, AssignedCell, ConstraintSystem, Layouter},
         SynthesisError,
@@ -21,13 +22,13 @@ const FOLD_STEP_COUNT: usize = 5;
 const A1: usize = 1;
 
 /// Input to be passed on the zero step to the primary circuit
-const PRIMARY_Z_0: [C1Scalar; A1] = [C1Scalar::ZERO];
+const PRIMARY_Z_0: [C1Scalar; A1] = [C1Scalar::ONE];
 
 /// Key size for Primary Circuit
 ///
 /// This is the minimum value, for your circuit you may get the output that the key size is
 /// insufficient, then increase this constant
-const PRIMARY_COMMITMENT_KEY_SIZE: usize = 20;
+const PRIMARY_COMMITMENT_KEY_SIZE: usize = 21;
 
 /// Table size for Primary Circuit
 ///
@@ -54,13 +55,23 @@ const SECONDARY_CIRCUIT_TABLE_SIZE: usize = 17;
 ///
 /// This is the minimum value, for your circuit you may get the output that the key size is
 /// insufficient, then increase this constant
-const SECONDARY_COMMITMENT_KEY_SIZE: usize = 20;
+const SECONDARY_COMMITMENT_KEY_SIZE: usize = 21;
 
-/// This structure is a template for configuring your circuit
-///
-/// It should store information about your PLONKish structure
+use sirius::halo2_proofs::plonk::{Advice, Column, Selector};
 #[derive(Debug, Clone)]
-struct MyConfig {}
+struct MyConfig {
+    /// Since we will have one gate
+    /// representing the sum, we add
+    /// one selector.
+    s: Selector,
+    /// This column will copy z_in and
+    /// represent the sum with itself
+    input: Column<Advice>,
+    /// This will be the result of the
+    /// calculation and cells from this
+    /// column will be returned as `z_out`
+    output: Column<Advice>,
+}
 
 /// This page is a template for your circuit
 /// Within this code - it returns the input unchanged
@@ -70,28 +81,71 @@ impl<const A: usize, F: PrimeField> StepCircuit<A, F> for MyStepCircuit {
     /// This is a configuration object that stores things like columns.
     type Config = MyConfig;
 
-    /// Configure the step circuit. This method initializes necessary
-    /// fixed columns and advice columns, but does not create any instance
-    /// columns.
-    ///
-    // TODO #329
-    fn configure(_cs: &mut ConstraintSystem<F>) -> Self::Config {
-        MyConfig {}
+    fn configure(cs: &mut ConstraintSystem<F>) -> Self::Config {
+        let config = Self::Config {
+            s: cs.selector(),
+            input: cs.advice_column(),
+            output: cs.advice_column(),
+        };
+
+        // Allow equality check for `input`
+        // for check consistency with `z_in`
+        cs.enable_equality(config.input);
+
+        // Creating a gate that reflects the sum
+        cs.create_gate("sum", |meta| {
+            let s = meta.query_selector(config.s);
+            let input = meta.query_advice(config.input, Rotation::cur());
+            let output = meta.query_advice(config.output, Rotation::cur());
+
+            vec![s * (input.clone() + input - output)]
+        });
+
+        config
     }
 
-    /// Sythesize the circuit for a computation step and return variable
-    /// that corresponds to the output of the step z_{i+1}
-    /// this method will be called when we synthesize the IVC_Circuit
-    ///
-    /// Return `z_out` result
     fn synthesize_step(
         &self,
-        _config: Self::Config,
-        _layouter: &mut impl Layouter<F>,
+        config: Self::Config,
+        layouter: &mut impl Layouter<F>,
         z_i: &[AssignedCell<F, F>; A],
     ) -> Result<[AssignedCell<F, F>; A], SynthesisError> {
-        // For this example we do not modify anything, we return the input unchanged
-        Ok(z_i.clone())
+        let output = layouter.assign_region(
+            || "main",
+            |mut region| {
+                z_i.iter()
+                    .enumerate() // we need an index to use as offset
+                    .map(|(i, cell)| {
+                        // Enable selector to trigger the gate
+                        config.s.enable(&mut region, i)?;
+
+                        let input = region.assign_advice(
+                            || "input",
+                            config.input,
+                            i,
+                            || cell.value().copied(),
+                        )?;
+
+                        // Check at the constraint system level that the cells are equal
+                        region.constrain_equal(cell.cell(), input.cell())?;
+
+                        // Perform the operation and place the result in the cell
+                        let output = region.assign_advice(
+                            || "output",
+                            config.output,
+                            i,
+                            || input.value().copied() + input.value(),
+                        )?;
+
+                        Ok(output)
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            },
+        )?;
+
+        Ok(output
+            .try_into() // convert to array
+            .expect("safe, because collect from input array"))
     }
 }
 
